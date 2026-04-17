@@ -1,2 +1,114 @@
-# Buscado-I2C-con-Arduino
-Buscado I2C con Arduino Pro Micro y pantalla Oled SPI
+# 🔍 Buscador I2C con ESP32 + OLED SPI
+
+Herramienta sencilla para detectar direcciones I2C usando un ESP32 y mostrarlas en una pantalla OLED SH1106 por SPI.
+
+---
+
+## 📸 Vista del proyecto
+
+![Montaje](fotos/montaje.jpg)
+
+---
+
+## ⚡ Características
+
+- 🔄 Escaneo automático en segundo plano
+- 🖥️ Pantalla OLED por SPI (sin interferencias con I2C)
+- 🔍 Detección de dispositivos I2C
+- 📋 Hasta 4 direcciones en pantalla
+- 🎯 Interfaz simple con 1 botón
+- ✨ Animación discreta `SCAN...`
+- 🚫 Sin parpadeos ni pantallas molestas
+
+---
+
+## 🎮 Control
+
+| Acción | Función |
+|------|--------|
+| Pulsación corta | Iniciar / parar escaneo |
+| Pulsación larga | Borrar resultados |
+
+---
+
+## 🖥️ Interfaz
+
+### Reposo
+
+### Escaneando
+
+### Parado
+
+---
+
+## 🔌 Conexiones
+
+### OLED (SPI)
+
+| OLED | ESP32 |
+|------|------|
+| GND | GND |
+| VCC | 3.3V |
+| SCK | GPIO 18 |
+| SDA (MOSI) | GPIO 23 |
+| RES | GPIO 16 |
+| DC | GPIO 17 |
+| CS | GPIO 5 |
+
+---
+
+### Botón
+
+| Pin | Conexión |
+|-----|--------|
+| GPIO 4 | Botón → GND |
+
+---
+
+### Bus I2C de prueba
+
+| Señal | ESP32 |
+|------|------|
+| SDA | GPIO 21 |
+| SCL | GPIO 22 |
+
+---
+
+## ⚠️ Notas
+
+- El sistema funciona a **3.3V**
+- No conectar módulos I2C de 5V directamente
+- La pantalla usa SPI → no ocupa el bus I2C
+
+---
+
+## 🧰 Librerías
+
+- Adafruit GFX
+- Adafruit SH110X
+
+---
+
+## 🚀 Uso
+
+1. Conecta un módulo I2C
+2. Pulsa el botón
+3. Lee la dirección en pantalla
+4. Mantén pulsado para limpiar
+
+---
+
+## 🔧 Futuras mejoras
+
+- Soporte 5V con conversor
+- Selector 3.3V / 5V
+- Caja impresa en 3D
+- Autoscroll
+
+---
+
+## 📜 Licencia
+
+MIT License
+
+
