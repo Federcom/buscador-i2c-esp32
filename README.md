@@ -16,10 +16,12 @@ Herramienta sencilla para detectar direcciones I2C usando un ESP32 y mostrarlas 
 - 🖥️ Pantalla OLED por SPI (sin interferencias con I2C)
 - 🔍 Detección de dispositivos I2C
 - 📋 Hasta 4 direcciones en pantalla
+- 🔽 Scroll automático si hay más dispositivos
+- ➕ Detección de cambios en vivo (+ aparece / - desaparece)
+- 🧪 Salida por Serial para debug
 - 🎯 Interfaz simple con 1 botón
 - ✨ Animación discreta `SCAN...`
 - 🚫 Sin parpadeos ni pantallas molestas
-
 ---
 
 ## 🎮 Control
@@ -32,6 +34,27 @@ Herramienta sencilla para detectar direcciones I2C usando un ESP32 y mostrarlas 
 ---
 
 ## 🖥️ Interfaz
+
+### Reposo
+
+Pulsa para escanear  
+Larga para borrar  
+
+### Escaneando
+
+0x3C  
+0x68  
+
+SCAN...  
+
+### Cambios detectados
+
++0x68  → dispositivo conectado  
+-0x68  → dispositivo desconectado  
+
+### Parado
+
+STOP OK:n  
 
 ### Reposo
 
@@ -73,6 +96,16 @@ Herramienta sencilla para detectar direcciones I2C usando un ESP32 y mostrarlas 
 | SCL | GPIO 22 |
 
 ---
+## 🧪 Debug por Serial
+
+El sistema muestra cambios en el monitor serie:
+
++ 0x3C  
+- 0x68  
+
+Permite detectar conexiones y desconexiones en tiempo real.
+
+
 
 ## ⚠️ Notas
 
@@ -103,7 +136,7 @@ Herramienta sencilla para detectar direcciones I2C usando un ESP32 y mostrarlas 
 - Soporte 5V con conversor
 - Selector 3.3V / 5V
 - Caja impresa en 3D
-- Autoscroll
+
 
 ---
 
