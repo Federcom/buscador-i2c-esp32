@@ -29,10 +29,10 @@ Adafruit_SH1106G display(128, 64,
 // TIEMPOS
 // ============================================================
 
-const unsigned long INTERVALO_ESCANEO_MS = 1800;
-const unsigned long DEBOUNCE_MS = 40;
-const unsigned long PULSACION_LARGA_MS = 900;
-const unsigned long INTERVALO_ANIM_MS = 300;
+const unsigned long INTERVALO_ESCANEO_MS = 1500;
+const unsigned long INTERVALO_ANIM_MS    = 300;
+const unsigned long INTERVALO_SCROLL_MS  = 2000;
+const unsigned long INTERVALO_CAMBIO_MS  = 1200;
 
 // ============================================================
 // CONTROL
@@ -43,41 +43,39 @@ bool pantallaSucia = true;
 
 unsigned long ultimoEscaneo = 0;
 unsigned long ultimoAnim = 0;
+unsigned long ultimoScroll = 0;
+
 byte estadoAnim = 0;
-
-// Botón
-bool ultimoEstadoLeidoBoton = HIGH;
-bool estadoEstableBoton = HIGH;
-unsigned long ultimoCambioBoton = 0;
-unsigned long tiempoPulsado = 0;
-bool pulsacionLargaDetectada = false;
-
-// ============================================================
-// MODOS DE PANTALLA
-// ============================================================
-
-enum ModoPantalla {
-  PANTALLA_REPOSO,
-  PANTALLA_RESULTADOS,
-  PANTALLA_MENSAJE
-};
-
-ModoPantalla modoPantalla = PANTALLA_REPOSO;
+byte scrollIndex = 0;
 
 // ============================================================
 // RESULTADOS
 // ============================================================
 
-byte direccionesEncontradas[32];
-byte totalEncontradas = 0;
+byte direcciones[32];
+byte total = 0;
 
-byte tempDireccionesEncontradas[32];
-byte tempTotalEncontradas = 0;
+byte prevDirecciones[32];
+byte prevTotal = 0;
 
-// Mensaje temporal
-char mensajeLinea1[24] = "";
-char mensajeLinea2[24] = "";
-unsigned long mensajeHasta = 0;
+// Cambios
+byte nuevas[8];
+byte totalNuevas = 0;
+
+byte eliminadas[8];
+byte totalEliminadas = 0;
+
+unsigned long mostrarCambiosHasta = 0;
+
+// ============================================================
+// BOTÓN
+// ============================================================
+
+bool lastRead = HIGH;
+bool stableState = HIGH;
+unsigned long lastChange = 0;
+unsigned long pressTime = 0;
+bool longPress = false;
 
 // ============================================================
 // SETUP
@@ -85,18 +83,20 @@ unsigned long mensajeHasta = 0;
 
 void setup() {
   pinMode(PIN_BOTON, INPUT_PULLUP);
+
   Wire.begin(I2C_SDA, I2C_SCL);
 
+  Serial.begin(115200);
+  Serial.println("I2C Scanner iniciado");
+
   if (!display.begin(0, true)) {
-    while (true) {
-    }
+    while (true);
   }
 
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
 
-  modoPantalla = PANTALLA_REPOSO;
-  pantallaSucia = true;
+  pantallaReposo();
 }
 
 // ============================================================
@@ -104,34 +104,33 @@ void setup() {
 // ============================================================
 
 void loop() {
-  gestionarBoton();
+  boton();
 
   if (escaneando) {
-    if (millis() - ultimoEscaneo >= INTERVALO_ESCANEO_MS) {
+
+    if (millis() - ultimoEscaneo > INTERVALO_ESCANEO_MS) {
       ultimoEscaneo = millis();
 
-      if (escanearI2C()) {
+      if (scanI2C()) {
         pantallaSucia = true;
       }
     }
 
-    if (millis() - ultimoAnim >= INTERVALO_ANIM_MS) {
+    if (millis() - ultimoAnim > INTERVALO_ANIM_MS) {
       ultimoAnim = millis();
       estadoAnim = (estadoAnim + 1) % 4;
+      dibujarPie();
+    }
 
-      if (modoPantalla == PANTALLA_RESULTADOS) {
-        dibujarPie();
-      }
+    if (millis() - ultimoScroll > INTERVALO_SCROLL_MS) {
+      ultimoScroll = millis();
+      scrollIndex++;
+      pantallaSucia = true;
     }
   }
 
-  if (modoPantalla == PANTALLA_MENSAJE && millis() >= mensajeHasta) {
-    modoPantalla = PANTALLA_REPOSO;
-    pantallaSucia = true;
-  }
-
   if (pantallaSucia) {
-    dibujarPantallaSegunModo();
+    pantallaResultados();
     pantallaSucia = false;
   }
 }
@@ -140,190 +139,179 @@ void loop() {
 // BOTÓN
 // ============================================================
 
-void gestionarBoton() {
+void boton() {
   bool lectura = digitalRead(PIN_BOTON);
 
-  if (lectura != ultimoEstadoLeidoBoton) {
-    ultimoCambioBoton = millis();
-    ultimoEstadoLeidoBoton = lectura;
+  if (lectura != lastRead) {
+    lastChange = millis();
+    lastRead = lectura;
   }
 
-  if ((millis() - ultimoCambioBoton) > DEBOUNCE_MS) {
-    if (lectura != estadoEstableBoton) {
-      estadoEstableBoton = lectura;
+  if (millis() - lastChange > 40) {
+    if (lectura != stableState) {
+      stableState = lectura;
 
-      if (estadoEstableBoton == LOW) {
-        tiempoPulsado = millis();
-        pulsacionLargaDetectada = false;
+      if (stableState == LOW) {
+        pressTime = millis();
+        longPress = false;
       } else {
-        if (!pulsacionLargaDetectada) {
-          accionPulsacionCorta();
+        if (!longPress) {
+          escaneando = !escaneando;
+          pantallaSucia = true;
         }
       }
     }
   }
 
-  if (estadoEstableBoton == LOW && !pulsacionLargaDetectada) {
-    if (millis() - tiempoPulsado >= PULSACION_LARGA_MS) {
-      pulsacionLargaDetectada = true;
-      accionPulsacionLarga();
+  if (stableState == LOW && !longPress) {
+    if (millis() - pressTime > 800) {
+      longPress = true;
+      borrar();
     }
   }
 }
 
-void accionPulsacionCorta() {
-  escaneando = !escaneando;
-
-  if (escaneando) {
-    ultimoEscaneo = 0;
-    modoPantalla = PANTALLA_RESULTADOS;
-  } else {
-    modoPantalla = PANTALLA_RESULTADOS;
-  }
-
-  pantallaSucia = true;
-}
-
-void accionPulsacionLarga() {
-  escaneando = false;
-  totalEncontradas = 0;
-  estadoAnim = 0;
-
-  strncpy(mensajeLinea1, "Resultados", sizeof(mensajeLinea1) - 1);
-  strncpy(mensajeLinea2, "borrados", sizeof(mensajeLinea2) - 1);
-  mensajeLinea1[sizeof(mensajeLinea1) - 1] = '\0';
-  mensajeLinea2[sizeof(mensajeLinea2) - 1] = '\0';
-
-  modoPantalla = PANTALLA_MENSAJE;
-  mensajeHasta = millis() + 800;
-  pantallaSucia = true;
-}
-
 // ============================================================
-// ESCANEO I2C
+// ESCANEO
 // ============================================================
 
-bool escanearI2C() {
-  tempTotalEncontradas = 0;
+bool scanI2C() {
+
+  byte temp[32];
+  byte tempTotal = 0;
 
   for (byte addr = 1; addr < 127; addr++) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) {
-      tempDireccionesEncontradas[tempTotalEncontradas++] = addr;
+      temp[tempTotal++] = addr;
     }
   }
 
-  if (tempTotalEncontradas != totalEncontradas) {
-    copiarResultados();
-    return true;
-  }
+  // Detectar cambios
+  totalNuevas = 0;
+  totalEliminadas = 0;
 
-  for (byte i = 0; i < tempTotalEncontradas; i++) {
-    if (tempDireccionesEncontradas[i] != direccionesEncontradas[i]) {
-      copiarResultados();
-      return true;
+  for (byte i = 0; i < tempTotal; i++) {
+    bool found = false;
+    for (byte j = 0; j < prevTotal; j++) {
+      if (temp[i] == prevDirecciones[j]) found = true;
+    }
+    if (!found && totalNuevas < 8) {
+      nuevas[totalNuevas++] = temp[i];
+      Serial.print("+ 0x"); Serial.println(temp[i], HEX);
     }
   }
 
-  return false;
-}
-
-void copiarResultados() {
-  totalEncontradas = tempTotalEncontradas;
-  for (byte i = 0; i < totalEncontradas; i++) {
-    direccionesEncontradas[i] = tempDireccionesEncontradas[i];
+  for (byte i = 0; i < prevTotal; i++) {
+    bool found = false;
+    for (byte j = 0; j < tempTotal; j++) {
+      if (prevDirecciones[i] == temp[j]) found = true;
+    }
+    if (!found && totalEliminadas < 8) {
+      eliminadas[totalEliminadas++] = prevDirecciones[i];
+      Serial.print("- 0x"); Serial.println(prevDirecciones[i], HEX);
+    }
   }
+
+  bool cambiado = (tempTotal != total);
+
+  for (byte i = 0; i < tempTotal && !cambiado; i++) {
+    if (temp[i] != direcciones[i]) cambiado = true;
+  }
+
+  if (cambiado) {
+    total = tempTotal;
+
+    for (byte i = 0; i < total; i++) {
+      direcciones[i] = temp[i];
+      prevDirecciones[i] = temp[i];
+    }
+    prevTotal = total;
+
+    mostrarCambiosHasta = millis() + INTERVALO_CAMBIO_MS;
+  }
+
+  return cambiado;
 }
 
 // ============================================================
-// DIBUJADO GENERAL
+// PANTALLA
 // ============================================================
 
-void dibujarPantallaSegunModo() {
+void pantallaReposo() {
+  display.clearDisplay();
+  display.setCursor(10, 25);
+  display.println("Pulsa para escanear");
+  display.setCursor(10, 40);
+  display.println("Larga para borrar");
+  display.display();
+}
+
+void pantallaResultados() {
+
   display.clearDisplay();
 
-  // Marco general siempre
   display.drawRect(0, 0, 128, 64, SH110X_WHITE);
   display.drawFastHLine(0, 12, 128, SH110X_WHITE);
   display.drawFastHLine(0, 52, 128, SH110X_WHITE);
 
   centrar("BUSCADOR I2C", 2);
 
-  switch (modoPantalla) {
-    case PANTALLA_REPOSO:
-      dibujarPantallaReposo();
-      break;
+  int start = scrollIndex % (total == 0 ? 1 : total);
 
-    case PANTALLA_RESULTADOS:
-      dibujarPantallaResultados();
-      break;
+  for (byte i = 0; i < 4; i++) {
+    byte idx = start + i;
+    if (idx >= total) break;
 
-    case PANTALLA_MENSAJE:
-      dibujarPantallaMensaje();
-      break;
+    display.setCursor(8, 16 + i * 9);
+
+    // Mostrar cambios
+    if (millis() < mostrarCambiosHasta) {
+      for (byte n = 0; n < totalNuevas; n++) {
+        if (direcciones[idx] == nuevas[n]) display.print("+");
+      }
+    }
+
+    display.print("0x");
+    hex2(direcciones[idx]);
   }
+
+  dibujarPie();
 
   display.display();
 }
 
-void dibujarPantallaReposo() {
-  display.setCursor(10, 22);
-  display.println("Pulsa para escanear");
-  display.setCursor(10, 34);
-  display.println("Larga para borrar");
-  dibujarPie();
-}
-
-void dibujarPantallaResultados() {
-  dibujarLista();
-  dibujarPie();
-}
-
-void dibujarPantallaMensaje() {
-  centrar(mensajeLinea1, 24);
-  centrar(mensajeLinea2, 36);
-  dibujarPie();
-}
-
-void dibujarLista() {
-  int y = 16;
-
-  if (totalEncontradas == 0) {
-    display.setCursor(8, 26);
-    display.println("Sin dispositivos");
-    return;
-  }
-
-  for (byte i = 0; i < totalEncontradas && i < 4; i++) {
-    display.setCursor(8, y + i * 9);
-    display.print("0x");
-    hex2(direccionesEncontradas[i]);
-  }
-}
+// ============================================================
+// PIE
+// ============================================================
 
 void dibujarPie() {
   display.fillRect(1, 53, 126, 10, SH110X_BLACK);
   display.setCursor(4, 55);
 
-  if (modoPantalla == PANTALLA_REPOSO) {
-    display.print("LISTO");
-  } else if (modoPantalla == PANTALLA_MENSAJE) {
-    display.print("INFO");
-  } else if (escaneando) {
+  if (escaneando) {
     display.print("SCAN");
-    for (byte i = 0; i < estadoAnim; i++) {
-      display.print(".");
-    }
+    for (byte i = 0; i < estadoAnim; i++) display.print(".");
   } else {
     display.print("STOP OK:");
-    display.print(totalEncontradas);
+    display.print(total);
   }
 
   display.display();
 }
 
 // ============================================================
-// UTILIDADES
+// BORRAR
+// ============================================================
+
+void borrar() {
+  total = 0;
+  prevTotal = 0;
+  pantallaReposo();
+}
+
+// ============================================================
+// UTIL
 // ============================================================
 
 void hex2(byte v) {
